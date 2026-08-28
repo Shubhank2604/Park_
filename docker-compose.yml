@@ -1,10 +1,12 @@
 services:
   mysql:
     image: mysql:8
-    environment: 
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: park
-    ports: 
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-park}
+      MYSQL_USER: ${MYSQL_USER:-park}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
@@ -15,7 +17,7 @@ services:
 
   redis:
     image: redis:7
-    ports: 
+    ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
@@ -29,7 +31,7 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    ports: 
+    ports:
       - "2181:2181"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
@@ -49,8 +51,8 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-    ports: 
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
       - "9092:9092"
     volumes:
       - kafka_data:/var/lib/kafka/data
