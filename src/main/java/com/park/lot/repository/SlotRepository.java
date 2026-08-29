@@ -14,6 +14,9 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface SlotRepository extends JpaRepository<Slot, Long> {
     List<Slot> findByLevelId(Long levelId);
+
+    @Query("SELECT s FROM Slot s JOIN FETCH s.level l JOIN FETCH l.parkingLot")
+    List<Slot> findAllWithLevelAndParkingLot();
     
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Slot> findFirstByLevelParkingLotIdAndTypeAndStatusOrderByLevelLevelNoAscIdAsc(
