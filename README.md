@@ -75,20 +75,17 @@ Protected endpoints require `Authorization: Bearer <token>`.
 
 ## Current allocation flow
 
-1. Read the cached free-slot count.
-2. Pop a candidate free slot from Redis.
-3. Fall back to the database when the cache has no candidate.
-4. create the ticket and mark the slot occupied in the database.
-5. Update cached ticket and slot state.
-6. Publish entry and slot events to Kafka.
+1. Select the first compatible free slot under a database pessimistic write lock.
+2. Create the ticket and mark the slot occupied in the same MySQL transaction.
+3. Update Redis and publish Kafka notifications only after the database commit succeeds.
+
+MySQL is the allocation source of truth. Redis is a post-commit availability view; a stale or unavailable cache cannot allocate the same slot twice.
 
 ## Reliability work planned
 
 The current implementation is an educational system and does not yet guarantee consistency across Redis, MySQL, and Kafka during partial failures. Planned improvements include:
 
 - atomic Redis reservation and expiry;
-- database locking or a unique active-reservation constraint;
-- compensation when a database transaction fails after cache reservation;
 - a transactional outbox for Kafka events;
 - idempotent event consumers;
 - Testcontainers integration tests and concurrent load tests; and
@@ -100,6 +97,7 @@ Documenting these limitations is intentional: production-grade correctness requi
 
 ```bash
 mvn test
+mvn verify
 mvn spring-boot:run
 docker compose down
 ```
