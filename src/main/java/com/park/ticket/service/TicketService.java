@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -55,24 +57,11 @@ public class TicketService {
         ParkingLot lot = parkingLotRepository.findById(request.getLotId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parking lot not found"));
         
-        // Check availability
-        long freeSlots = slotCache.getFreeSlotCount(request.getLotId(), request.getVehicleType().toUpperCase());
-        if (freeSlots == 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No available slots");
-        }
-        
-        // Try to get a free slot from Redis cache first
-        Slot slot = slotCache.popAnyFreeSlot(request.getLotId(), request.getVehicleType().toUpperCase())
-                .map(slotId -> slotRepository.findById(slotId).orElse(null))
-                .orElse(null);
-        
-        // Fallback to database query if Redis cache is empty
-        if (slot == null) {
-            slot = slotRepository.findFirstFreeSlotByLotAndType(
-                    request.getLotId(), 
-                    Slot.SlotType.valueOf(request.getVehicleType().toUpperCase())
-            ).orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No available slots"));
-        }
+        String vehicleType = request.getVehicleType().toUpperCase();
+        Slot slot = slotRepository
+                .findFirstByLevelParkingLotIdAndTypeAndStatusOrderByLevelLevelNoAscIdAsc(
+                        request.getLotId(), Slot.SlotType.valueOf(vehicleType), Slot.SlotStatus.FREE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No available slots"));
         
         // Create ticket
         Ticket ticket = new Ticket();
@@ -89,32 +78,21 @@ public class TicketService {
         ticket = ticketRepository.save(ticket);
         slotRepository.save(slot);
         
-        // Update Redis cache
-        slotCache.markOccupied(request.getLotId(), slot.getId(), request.getVehicleType().toUpperCase());
-        slotCache.cacheOpenTicket(request.getPlateNo(), ticket.getId());
-        slotCache.cacheTicketSummary(ticket.getId(), Map.of(
+        Ticket savedTicket = ticket;
+        Map<String, String> ticketSummary = Map.of(
             "slotId", slot.getId().toString(),
             "lotId", lot.getId().toString(),
             "entryTime", ticket.getEntryTime().toString(),
             "plate", request.getPlateNo()
-        ));
-        
-        // Publish events
-        eventPublisher.publishEntry(new EntryEvent(
-            ticket.getId(),
-            lot.getId(),
-            slot.getId(),
-            request.getPlateNo(),
-            request.getVehicleType(),
-            ticket.getEntryTime()
-        ));
-        
-        eventPublisher.publishSlot(new SlotUpdated(
-            slot.getId(),
-            lot.getId(),
-            request.getVehicleType(),
-            "OCCUPIED"
-        ));
+        );
+        afterCommit(() -> {
+            slotCache.markOccupied(request.getLotId(), slot.getId(), vehicleType);
+            slotCache.cacheOpenTicket(request.getPlateNo(), savedTicket.getId());
+            slotCache.cacheTicketSummary(savedTicket.getId(), ticketSummary);
+            eventPublisher.publishEntry(new EntryEvent(savedTicket.getId(), lot.getId(), slot.getId(),
+                    request.getPlateNo(), vehicleType, savedTicket.getEntryTime()));
+            eventPublisher.publishSlot(new SlotUpdated(slot.getId(), lot.getId(), vehicleType, "OCCUPIED"));
+        });
         
         return Map.of(
             "ticketId", ticket.getId(),
@@ -141,12 +119,7 @@ public class TicketService {
         slot.setStatus(Slot.SlotStatus.FREE);
         slotRepository.save(slot);
         
-        // Update Redis cache
-        slotCache.markFree(ticket.getParkingLot().getId(), slot.getId(), slot.getType().name());
-        slotCache.removeOpenTicket(ticket.getVehicle().getPlateNo());
-        
-        // Publish events
-        eventPublisher.publishExit(new ExitEvent(
+        ExitEvent exitEvent = new ExitEvent(
             ticket.getId(),
             ticket.getParkingLot().getId(),
             slot.getId(),
@@ -154,19 +127,28 @@ public class TicketService {
             slot.getType().name(),
             ticket.getEntryTime(),
             ticket.getExitTime()
-        ));
-        
-        eventPublisher.publishSlot(new SlotUpdated(
-            slot.getId(),
-            ticket.getParkingLot().getId(),
-            slot.getType().name(),
-            "FREE"
-        ));
+        );
+        afterCommit(() -> {
+            slotCache.markFree(ticket.getParkingLot().getId(), slot.getId(), slot.getType().name());
+            slotCache.removeOpenTicket(ticket.getVehicle().getPlateNo());
+            eventPublisher.publishExit(exitEvent);
+            eventPublisher.publishSlot(new SlotUpdated(slot.getId(), ticket.getParkingLot().getId(),
+                    slot.getType().name(), "FREE"));
+        });
         
         return Map.of(
             "ticketId", ticket.getId(),
             "exitTime", ticket.getExitTime(),
             "billing", "processing"
         );
+    }
+
+    private void afterCommit(Runnable action) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 }
