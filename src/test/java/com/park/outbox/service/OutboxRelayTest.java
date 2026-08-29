@@ -1,5 +1,3 @@
-[dev 843c5f1] Use supported instant assertion
- 1 file changed, 1 insertion(+), 1 deletion(-)
 package com.park.outbox.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
