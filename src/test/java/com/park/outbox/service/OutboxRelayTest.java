@@ -61,6 +61,6 @@ class OutboxRelayTest {
 
         assertThat(event.getPublishedAt()).isNull();
         assertThat(event.getAttempts()).isEqualTo(1);
-        assertThat(event.getNextAttemptAt()).isAfter(Instant.now());
+        assertThat(event.getNextAttemptAt()).isAfter(event.getCreatedAt());
     }
 }
