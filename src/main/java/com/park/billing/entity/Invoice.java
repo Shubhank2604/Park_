@@ -21,7 +21,7 @@ public class Invoice {
     private Long id;
     
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ticket_id", nullable = false)
+    @JoinColumn(name = "ticket_id", nullable = false, unique = true)
     private Ticket ticket;
     
     @Column(name = "amount_cents", nullable = false)

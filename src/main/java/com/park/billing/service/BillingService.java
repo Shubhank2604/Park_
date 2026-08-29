@@ -7,7 +7,7 @@ import com.park.billing.repository.TariffRuleRepository;
 import com.park.common.events.ExitEvent;
 import com.park.common.events.InvoiceCreated;
 import com.park.common.events.PaymentCompleted;
-import com.park.common.service.EventPublisher;
+import com.park.outbox.service.OutboxService;
 import com.park.ticket.entity.Ticket;
 import com.park.ticket.repository.TicketRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ public class BillingService {
     private final InvoiceRepository invoiceRepository;
     private final TariffRuleRepository tariffRuleRepository;
     private final TicketRepository ticketRepository;
-    private final EventPublisher eventPublisher;
+    private final OutboxService outboxService;
     
     @KafkaListener(topics = "parking.exit", groupId = "billing")
     public void onExit(ExitEvent event) {
@@ -36,6 +36,10 @@ public class BillingService {
     
     @Transactional
     public Invoice generateInvoice(ExitEvent event) {
+        List<Invoice> existing = invoiceRepository.findByTicketId(event.ticketId());
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
         Ticket ticket = ticketRepository.findById(event.ticketId())
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
         
@@ -53,7 +57,7 @@ public class BillingService {
         invoice = invoiceRepository.save(invoice);
         
         // Publish event
-        eventPublisher.publishInvoiceCreated(new InvoiceCreated(
+        outboxService.record("billing.invoice.created", invoice.getId().toString(), new InvoiceCreated(
             invoice.getId(),
             ticket.getId(),
             amountCents,
@@ -107,7 +111,7 @@ public class BillingService {
         invoiceRepository.save(invoice);
         
         // Publish payment completed event
-        eventPublisher.publishPaymentCompleted(new PaymentCompleted(
+        outboxService.record("payment.completed", invoice.getId().toString(), new PaymentCompleted(
             invoice.getId(),
             invoice.getTicket().getId(),
             invoice.getAmountCents(),

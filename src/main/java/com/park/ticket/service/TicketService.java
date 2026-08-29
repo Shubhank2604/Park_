@@ -5,12 +5,12 @@ import com.park.common.dto.ExitRequest;
 import com.park.common.events.EntryEvent;
 import com.park.common.events.ExitEvent;
 import com.park.common.events.SlotUpdated;
-import com.park.common.service.EventPublisher;
 import com.park.lot.entity.ParkingLot;
 import com.park.lot.entity.Slot;
 import com.park.lot.repository.ParkingLotRepository;
 import com.park.lot.repository.SlotRepository;
 import com.park.lot.service.SlotCache;
+import com.park.outbox.service.OutboxService;
 import com.park.ticket.entity.Ticket;
 import com.park.ticket.repository.TicketRepository;
 import com.park.vehicle.entity.Vehicle;
@@ -35,7 +35,7 @@ public class TicketService {
     private final ParkingLotRepository parkingLotRepository;
     private final SlotRepository slotRepository;
     private final SlotCache slotCache;
-    private final EventPublisher eventPublisher;
+    private final OutboxService outboxService;
     
     @Transactional
     public Map<String, Object> processEntry(EntryRequest request) {
@@ -85,13 +85,15 @@ public class TicketService {
             "entryTime", ticket.getEntryTime().toString(),
             "plate", request.getPlateNo()
         );
+        outboxService.record("parking.entry", savedTicket.getId().toString(),
+                new EntryEvent(savedTicket.getId(), lot.getId(), slot.getId(),
+                        request.getPlateNo(), vehicleType, savedTicket.getEntryTime()));
+        outboxService.record("slot.updated", slot.getId().toString(),
+                new SlotUpdated(slot.getId(), lot.getId(), vehicleType, "OCCUPIED"));
         afterCommit(() -> {
             slotCache.markOccupied(request.getLotId(), slot.getId(), vehicleType);
             slotCache.cacheOpenTicket(request.getPlateNo(), savedTicket.getId());
             slotCache.cacheTicketSummary(savedTicket.getId(), ticketSummary);
-            eventPublisher.publishEntry(new EntryEvent(savedTicket.getId(), lot.getId(), slot.getId(),
-                    request.getPlateNo(), vehicleType, savedTicket.getEntryTime()));
-            eventPublisher.publishSlot(new SlotUpdated(slot.getId(), lot.getId(), vehicleType, "OCCUPIED"));
         });
         
         return Map.of(
@@ -128,12 +130,12 @@ public class TicketService {
             ticket.getEntryTime(),
             ticket.getExitTime()
         );
+        outboxService.record("parking.exit", ticket.getId().toString(), exitEvent);
+        outboxService.record("slot.updated", slot.getId().toString(),
+                new SlotUpdated(slot.getId(), ticket.getParkingLot().getId(), slot.getType().name(), "FREE"));
         afterCommit(() -> {
             slotCache.markFree(ticket.getParkingLot().getId(), slot.getId(), slot.getType().name());
             slotCache.removeOpenTicket(ticket.getVehicle().getPlateNo());
-            eventPublisher.publishExit(exitEvent);
-            eventPublisher.publishSlot(new SlotUpdated(slot.getId(), ticket.getParkingLot().getId(),
-                    slot.getType().name(), "FREE"));
         });
         
         return Map.of(
