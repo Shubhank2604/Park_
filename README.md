@@ -80,8 +80,9 @@ Protected endpoints require `Authorization: Bearer <token>`.
 3. Write Kafka events to the outbox in the same transaction.
 4. Update Redis only after the database commit succeeds.
 5. Relay pending outbox rows to Kafka and mark them published after broker acknowledgement.
+6. Periodically rebuild Redis free-slot sets and counters from MySQL, including empty slot types, to repair stale cache state after Redis downtime or missed post-commit updates.
 
-MySQL is the allocation source of truth. Redis is a post-commit availability view; a stale or unavailable cache cannot allocate the same slot twice. The outbox closes the crash window between committing parking state and sending Kafka events. Failed sends remain pending and retry with bounded exponential backoff.
+MySQL is the allocation source of truth. Redis is a post-commit availability view; a stale or unavailable cache cannot allocate the same slot twice. A scheduled reconciliation atomically replaces cached free-slot sets and counters from database state. The outbox closes the crash window between committing parking state and sending Kafka events. Failed sends remain pending and retry with bounded exponential backoff.
 
 Billing handles redelivered exit events idempotently: one ticket can create at most one invoice, enforced by both an existence check and a unique database constraint.
 
@@ -90,7 +91,6 @@ Billing handles redelivered exit events idempotently: one ticket can create at m
 The current implementation is an educational system and does not yet guarantee consistency across Redis, MySQL, and Kafka during partial failures. Planned improvements include:
 
 - atomic Redis reservation and expiry;
-- cache reconciliation after Redis downtime;
 - outbox retention and dead-letter operations;
 - idempotency for future consumers beyond billing;
 - Testcontainers integration tests and concurrent load tests; and

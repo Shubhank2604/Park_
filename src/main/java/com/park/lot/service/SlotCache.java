@@ -2,8 +2,11 @@ package com.park.lot.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 
@@ -59,6 +62,28 @@ public class SlotCache {
         
         redisTemplate.opsForSet().add(freeSlotsKey, String.valueOf(slotId));
         redisTemplate.opsForValue().increment(freeCounterKey);
+    }
+
+    public void replaceFreeSlots(long lotId, String type, Collection<Long> freeSlotIds) {
+        String freeSlotsKey = "lot:" + lotId + ":freeSlots:" + type;
+        String freeCounterKey = "lot:" + lotId + ":free:" + type;
+
+        redisTemplate.execute(new SessionCallback<>() {
+            @Override
+            public <K, V> java.util.List<Object> execute(RedisOperations<K, V> operations) {
+                StringRedisTemplate template = (StringRedisTemplate) operations;
+                template.multi();
+                template.delete(freeSlotsKey);
+                template.opsForValue().set(freeCounterKey, String.valueOf(freeSlotIds.size()));
+                if (!freeSlotIds.isEmpty()) {
+                    template.opsForSet().add(
+                            freeSlotsKey,
+                            freeSlotIds.stream().map(String::valueOf).toArray(String[]::new)
+                    );
+                }
+                return template.exec();
+            }
+        });
     }
     
     public long getFreeSlotCount(long lotId, String type) {

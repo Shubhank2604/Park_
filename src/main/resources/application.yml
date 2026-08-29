@@ -51,6 +51,9 @@ server:
   port: ${SERVER_PORT:8080}
 
 app:
+  availability:
+    reconcile-delay-ms: ${AVAILABILITY_RECONCILE_DELAY_MS:60000}
+    reconcile-initial-delay-ms: ${AVAILABILITY_RECONCILE_INITIAL_DELAY_MS:5000}
   outbox:
     poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
   seed:
