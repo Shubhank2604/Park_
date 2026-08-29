@@ -40,6 +40,12 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "dead_lettered_at")
+    private Instant deadLetteredAt;
+
+    @Column(name = "last_error", length = 1000)
+    private String lastError;
+
     public OutboxEvent(String topic, String eventKey, String eventType, String payload, Instant now) {
         this.topic = topic;
         this.eventKey = eventKey;
@@ -51,10 +57,18 @@ public class OutboxEvent {
 
     public void markPublished(Instant now) {
         this.publishedAt = now;
+        this.lastError = null;
     }
 
-    public void markFailed(Instant nextAttemptAt) {
+    public void markFailed(Instant nextAttemptAt, String error) {
         this.attempts += 1;
         this.nextAttemptAt = nextAttemptAt;
+        this.lastError = error;
+    }
+
+    public void markDeadLettered(Instant now, String error) {
+        this.attempts += 1;
+        this.deadLetteredAt = now;
+        this.lastError = error;
     }
 }

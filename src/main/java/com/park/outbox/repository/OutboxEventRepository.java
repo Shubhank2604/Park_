@@ -10,5 +10,5 @@ import java.util.List;
 
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    List<OutboxEvent> findTop50ByPublishedAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(Instant now);
+    List<OutboxEvent> findTop50ByPublishedAtIsNullAndDeadLetteredAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(Instant now);
 }
