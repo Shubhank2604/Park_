@@ -61,6 +61,6 @@ class OutboxRelayTest {
 
         assertThat(event.getPublishedAt()).isNull();
         assertThat(event.getAttempts()).isEqualTo(1);
-        assertThat(event.getNextAttemptAt()).isGreaterThanOrEqualTo(event.getCreatedAt());
+        assertThat(event.getNextAttemptAt()).isAfterOrEqualTo(event.getCreatedAt());
     }
 }
