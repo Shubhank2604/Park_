@@ -56,6 +56,7 @@ app:
     reconcile-initial-delay-ms: ${AVAILABILITY_RECONCILE_INITIAL_DELAY_MS:5000}
   outbox:
     poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
   seed:
     enabled: ${SEED_DATA_ENABLED:false}
     admin-username: ${SEED_ADMIN_USERNAME:admin}

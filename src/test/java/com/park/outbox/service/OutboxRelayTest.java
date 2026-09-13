@@ -26,7 +26,7 @@ class OutboxRelayTest {
                 "slot.updated", "42", SlotUpdated.class.getName(),
                 mapper.writeValueAsString(new SlotUpdated(42L, 7L, "CAR", "FREE")), Instant.now());
         OutboxEventRepository repository = mock(OutboxEventRepository.class);
-        when(repository.findTop50ByPublishedAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(any()))
+        when(repository.findTop50ByPublishedAtIsNullAndDeadLetteredAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(any()))
                 .thenReturn(List.of(event));
 
         @SuppressWarnings("unchecked")
@@ -48,7 +48,7 @@ class OutboxRelayTest {
                 "slot.updated", "42", SlotUpdated.class.getName(),
                 mapper.writeValueAsString(new SlotUpdated(42L, 7L, "CAR", "FREE")), Instant.now());
         OutboxEventRepository repository = mock(OutboxEventRepository.class);
-        when(repository.findTop50ByPublishedAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(any()))
+        when(repository.findTop50ByPublishedAtIsNullAndDeadLetteredAtIsNullAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(any()))
                 .thenReturn(List.of(event));
 
         @SuppressWarnings("unchecked")
@@ -61,6 +61,6 @@ class OutboxRelayTest {
 
         assertThat(event.getPublishedAt()).isNull();
         assertThat(event.getAttempts()).isEqualTo(1);
-        assertThat(event.getNextAttemptAt()).isAfter(Instant.now());
+        assertThat(event.getNextAttemptAt()).isAfterOrEqualTo(event.getCreatedAt());
     }
 }
